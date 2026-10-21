@@ -89,12 +89,17 @@ function setTheme(t) {
 $('#theme').onclick = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 $('#theme').textContent = document.documentElement.dataset.theme === 'dark' ? 'Light mode' : 'Dark mode';
 
-// sprite: local sprites/<dex>.png first, then PokeAPI online, then a "?" placeholder
-const sprite = (m, cls) => m.dex
-  ? `<img class="${cls}" loading="lazy" alt="" src="sprites/${m.dex}.png" onerror="fallback(this,${m.dex})">`
-  : `<div class="${cls} ph">?</div>`;
-function fallback(img, d) {
-  if (!img.dataset.r) { img.dataset.r = 1; img.src = REMOTE + d + '.png'; return; }
+// sprite: sprites/<slug>.png (forms), then sprites/<dex>.png, then PokeAPI directly, then a "?" placeholder
+const chain = (slug, d) => [slug && `sprites/${slug}.png`, d && `sprites/${d}.png`, d && REMOTE + d + '.png'].filter(Boolean);
+const sprite = (m, cls) => {
+  const c = chain(m.slug, m.dex);
+  return c.length
+    ? `<img class="${cls}" loading="lazy" alt="" src="${esc(c[0])}" data-n="0" data-s="${esc(m.slug || '')}" data-d="${m.dex || ''}" onerror="fallback(this)">`
+    : `<div class="${cls} ph">?</div>`;
+};
+function fallback(img) {
+  const c = chain(img.dataset.s, img.dataset.d), n = +img.dataset.n + 1;
+  if (n < c.length) { img.dataset.n = n; img.src = c[n]; return; }
   const p = document.createElement('div'); p.className = img.className + ' ph'; p.textContent = '?'; img.replaceWith(p);
 }
 function toggle(m, on) {

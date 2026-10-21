@@ -1,34 +1,50 @@
 #!/usr/bin/env python3
 """
 Tiny per-user progress API for the Cobblemon Dex (standard library only).
-Run it behind nginx; it listens on 127.0.0.1 only.
+Also serves the page, mons.json and sprites. Listens on 127.0.0.1 only; run it
+behind nginx.
 
-  DEX_DATA=/var/lib/cobblemon-dex DEX_PORT=8099 python3 dex_server.py
+  DEX_DATA=/var/lib/cobbledex DEX_PORT=8099 python3 dex_server.py
 
 Each visitor gets a random ID stored in an HttpOnly cookie. The server keeps
 {name, caught} per ID in <DEX_DATA>/<id>.json. The ID doubles as a private
 "key" so a user can restore their dex on another device.
+
+Sprites: /sprites/<slug>.png (forms, from pokesprite) and /sprites/<dex>.png
+(from PokeAPI) are downloaded on first request and cached in <DEX_DATA>/sprites.
+Sprites placed by hand in <DEX_STATIC>/sprites take priority.
 """
 import json
 import os
 import re
 import secrets
 import threading
+import urllib.error
+import urllib.request
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
-DATA = Path(os.environ.get("DEX_DATA", "dex_users"))
+DATA = Path(os.environ.get("DEX_DATA", "dex_users")).resolve()
 DATA.mkdir(parents=True, exist_ok=True)
 HOST, PORT = "127.0.0.1", int(os.environ.get("DEX_PORT", "8099"))
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 MAX_BODY, MAX_CAUGHT = 20_000, 5_000
+LOCK = threading.Lock()
+
 STATIC = Path(os.environ.get("DEX_STATIC", Path(__file__).parent)).resolve()
 INDEX = "cobblemon_dex.html"
 TYPES = {".html": "text/html; charset=utf-8", ".json": "application/json",
          ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp", ".ico": "image/x-icon"}
-LOCK = threading.Lock()
+
+SPRITES = DATA / "sprites"
+SPRITE_RE = re.compile(r"^/sprites/([a-z0-9]+(?:-[a-z0-9]+)*)\.png$")
+SOURCES = {
+    "slug": "https://raw.githubusercontent.com/msikma/pokesprite/master/pokemon-gen8/regular/",
+    "dex": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/",
+}
+MISSING = set()  # sprites the source answered 404 for (until restart)
 
 
 def read_user(uid):
@@ -50,19 +66,6 @@ def write_user(uid, data):
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
-
-    def static(self, p):
-        f = (STATIC / (INDEX if p in ("", "/") else p.lstrip("/"))).resolve()
-        if not (f.is_file() and f.suffix.lower() in TYPES
-                and STATIC in f.parents and DATA.resolve() not in f.parents):
-            return self.send(404, {})
-        body = f.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", TYPES[f.suffix.lower()])
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-cache")
-        self.end_headers()
-        self.wfile.write(body)
 
     def send(self, code, obj, cookie=None):
         body = json.dumps(obj).encode()
@@ -92,8 +95,57 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return None
 
+    def send_file(self, f, ctype, cache):
+        body = f.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", cache)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def static(self, p):
+        f = (STATIC / (INDEX if p in ("", "/") else p.lstrip("/"))).resolve()
+        if not (f.is_file() and f.suffix.lower() in TYPES
+                and STATIC in f.parents and DATA not in f.parents):
+            return self.send(404, {})
+        self.send_file(f, TYPES[f.suffix.lower()], "no-cache")
+
+    def sprite(self, name):
+        f = SPRITES / f"{name}.png"
+        if not f.is_file():
+            hand = STATIC / "sprites" / f"{name}.png"  # hand-placed sprites win
+            if hand.is_file():
+                f = hand
+            elif name in MISSING:
+                return self.send(404, {})
+            else:
+                url = SOURCES["dex" if name.isdigit() else "slug"] + f"{name}.png"
+                try:
+                    SPRITES.mkdir(exist_ok=True)
+                    with urllib.request.urlopen(url, timeout=10) as r:
+                        img = r.read(500_000)
+                    if not img.startswith(b"\x89PNG"):
+                        raise ValueError("not a png")
+                    tmp = f.with_suffix(f".{secrets.token_hex(4)}.tmp")
+                    tmp.write_bytes(img)
+                    os.replace(tmp, f)
+                except urllib.error.HTTPError as e:
+                    if e.code == 404:
+                        MISSING.add(name)
+                    return self.send(404, {})
+                except Exception:
+                    return self.send(404, {})
+        self.send_file(f, "image/png", "public, max-age=2592000")
+
+    def do_HEAD(self):
+        self.do_GET()
+
     def do_GET(self):
         p = unquote(self.path.split("?")[0])
+        m = SPRITE_RE.match(p)
+        if m:
+            return self.sprite(m.group(1))
         if p != "/api/me":
             return self.send(404, {}) if p.startswith("/api/") else self.static(p)
         uid = self.uid()
@@ -139,5 +191,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"Dex API on http://{HOST}:{PORT}, data in {DATA.resolve()}")
+    print(f"Dex API on http://{HOST}:{PORT}, data in {DATA}")
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

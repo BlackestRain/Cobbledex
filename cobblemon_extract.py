@@ -38,6 +38,23 @@ GITLAB_ARCHIVE = "https://gitlab.com/api/v4/projects/cable-mc%2Fcobblemon/reposi
 DATA_PATH = "common/src/main/resources/data/cobblemon"
 
 
+REGION = {"alolan": "alola", "galarian": "galar", "hisuian": "hisui", "paldean": "paldea"}
+FORM_FIX = {"highplains": "high-plains", "icysnow": "icy-snow", "pokeball": "poke-ball"}
+
+
+def sprite_slug(name, tokens, base):
+    """'Marowak' + ['alolan'] -> 'marowak-alola'; Vivillon patterns -> 'vivillon-river'."""
+    clean = lambda s: re.sub(r"[^a-z0-9]+", "-", re.sub(r"[.'\u2019]", "", s.lower())).strip("-")
+    parts = [clean(name or norm(base))]
+    for t in tokens:
+        t = t.split("=", 1)[-1].lower()
+        if not t or norm(t) == norm(base):
+            continue
+        key = re.sub(r"[^a-z0-9]", "", t)
+        parts.append(REGION.get(key) or FORM_FIX.get(key) or clean(t))
+    return "-".join(p for p in parts if p)
+
+
 def download(ref, dest):
     """Download just the Cobblemon data folder at <ref> (branch or tag) into dest."""
     url = f"{GITLAB_ARCHIVE}?sha={urllib.parse.quote(ref)}&path={DATA_PATH}"
@@ -329,6 +346,8 @@ def main():
                 variant = split_variant(path.stem)[1] or split_variant(entry.get("id", ""))[1]
             if variant and not args.include_variants:
                 continue
+            if norm(base) == "empty":  # Cobblemon's placeholder spawn file
+                continue
             sp = species.get(norm(base), {})
             if not sp:
                 print(f"  no species file found for '{base}' ({path.name})", file=sys.stderr)
@@ -362,6 +381,7 @@ def main():
                 "conditions": sentence(parts),
                 "catch": sp.get("catchRate", ""),
                 "dex": sp.get("nationalPokedexNumber"),
+                "slug": sprite_slug(sp.get("name"), tokens[1:], base),
                 "types": [t for t in (sp.get("primaryType"), sp.get("secondaryType")) if t],
                 "stats": sp.get("baseStats", {}),
                 "drops": format_drops(entry.get("drops") or sp.get("drops")),
@@ -373,7 +393,7 @@ def main():
     groups = {}
     for d in detail:
         g = groups.setdefault(d["name"], {"catch": d["catch"], "drops": [], "entries": [],
-                                              "dex": d["dex"], "types": d["types"], "stats": d["stats"]})
+                                              "dex": d["dex"], "slug": d["slug"], "types": d["types"], "stats": d["stats"]})
         key = (d["rarity"], d["biome"], d["level"], d["conditions"])
         if key not in g["entries"]:
             g["entries"].append(key)
@@ -397,7 +417,7 @@ def main():
         summary.append(["", name, rarity, biome, cond, g["catch"], "\n\n".join(g["drops"])])
 
     # JSON for the Pokedex viewer (cobblemon_dex.html)
-    out = [{"name": n, "dex": g["dex"], "types": g["types"], "stats": g["stats"],
+    out = [{"name": n, "dex": g["dex"], "slug": g["slug"], "types": g["types"], "stats": g["stats"],
             "catch": g["catch"], "drops": g["drops"],
             "spawns": [dict(zip(("rarity", "biome", "level", "conditions"), e)) for e in g["entries"]]}
            for n, g in groups.items()]
