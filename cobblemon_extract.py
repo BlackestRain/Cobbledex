@@ -8,8 +8,15 @@ Sheet 'Mons': one row per mon -> [tick] | Name | Rarity | Biome | Conditions | C
 Sheet 'All spawn entries': one row per spawn entry.
 
 Usage:
-    pip install xlsxwriter
-    python cobblemon_extract.py <data_dir> [more_data_dirs...] [-o out.xlsx] [--include-variants]
+    python cobblemon_extract.py --download -o mons.json            # fetch data, write JSON only
+    python cobblemon_extract.py --download --ref <tag> -o mons.json
+    python cobblemon_extract.py <data_dir> [more_dirs...] [-o out.xlsx] [--include-variants]
+
+--download fetches only the needed data folder from Cobblemon's GitLab repo into a
+temporary directory and deletes it afterwards. Any data_dirs given as well load after
+it, so datapacks override the base data.
+An output name ending in .json writes just the Pokedex JSON (no xlsxwriter needed);
+anything else writes the spreadsheet (pip install xlsxwriter) plus the JSON beside it.
 
 Each <data_dir> is any folder that contains (somewhere below it) the `species` and
 `spawn_pool_world` folders. Directories load in order; later ones override earlier
@@ -20,9 +27,30 @@ import argparse
 import json
 import re
 import sys
+import tempfile
+import urllib.parse
+import urllib.request
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
-import xlsxwriter
+GITLAB_ARCHIVE = "https://gitlab.com/api/v4/projects/cable-mc%2Fcobblemon/repository/archive.zip"
+DATA_PATH = "common/src/main/resources/data/cobblemon"
+
+
+def download(ref, dest):
+    """Download just the Cobblemon data folder at <ref> (branch or tag) into dest."""
+    url = f"{GITLAB_ARCHIVE}?sha={urllib.parse.quote(ref)}&path={DATA_PATH}"
+    print(f"Downloading Cobblemon data ({ref})...")
+    req = urllib.request.Request(url, headers={"User-Agent": "cobbledex-extract"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            blob = r.read()
+    except Exception as e:
+        sys.exit(f"Download failed: {e}")
+    with zipfile.ZipFile(BytesIO(blob)) as z:
+        z.extractall(dest)
+    print(f"  {len(blob) / 1e6:.1f} MB downloaded")
 
 # ----------------------------------------------------------------- name helpers
 DEX_PREFIX = re.compile(r"^\d+[\s_-]+")
@@ -256,15 +284,26 @@ def merge_preset(entry, presets):
 # ------------------------------------------------------------------------ main
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("roots", nargs="+", help="data directories (base first, then datapacks)")
+    ap.add_argument("roots", nargs="*", help="data directories (base first, then datapacks)")
+    ap.add_argument("--download", action="store_true",
+                    help="fetch base Cobblemon data from GitLab into a temp folder (deleted afterwards)")
+    ap.add_argument("--ref", default="main", help="branch or tag to download (default: main)")
     ap.add_argument("-o", "--output", default="cobblemon_spawns.xlsx")
     ap.add_argument("--include-variants", action="store_true",
                     help="include alpha and herd spawns (excluded by default)")
     args = ap.parse_args()
 
-    species_files = collect(args.roots, "species")
-    spawn_files = collect(args.roots, "spawn_pool_world")
-    preset_files = collect(args.roots, "spawn_detail_presets")
+    tmp = tempfile.TemporaryDirectory(prefix="cobblemon-")
+    roots = list(args.roots)
+    if args.download:
+        download(args.ref, tmp.name)
+        roots.insert(0, tmp.name)
+    if not roots:
+        ap.error("give at least one data directory, or use --download")
+
+    species_files = collect(roots, "species")
+    spawn_files = collect(roots, "spawn_pool_world")
+    preset_files = collect(roots, "spawn_detail_presets")
 
     species = {}
     for (_, _rel), (path, data) in species_files.items():
@@ -273,6 +312,7 @@ def main():
             species.setdefault(norm(data["name"]), data)
     presets = {path.stem: data for (_, _rel), (path, data) in preset_files.items()}
 
+    tmp.cleanup()  # everything is loaded into memory now
     print(f"{len(species)} species, {len(spawn_files)} spawn files, {len(presets)} presets")
 
     detail = []
@@ -356,51 +396,55 @@ def main():
                 cond = f"Level {levels.pop()}\n" + cond
         summary.append(["", name, rarity, biome, cond, g["catch"], "\n\n".join(g["drops"])])
 
-    wb = xlsxwriter.Workbook(args.output)
-    header = wb.add_format({"bold": True, "bg_color": "#DDDDDD", "border": 1})
-    wrap = wb.add_format({"text_wrap": True, "valign": "top"})
-    tick = wb.add_format({"valign": "top", "align": "center", "font_size": 14})
-
-    ws = wb.add_worksheet("Mons")
-    headers = ["", "Name", "Rarity", "Biome", "Conditions", "Catch chance", "Drops"]
-    for c, h in enumerate(headers):
-        ws.write(0, c, h, header)
-    for r, row in enumerate(summary, start=1):
-        for c, val in enumerate(row):
-            if c == 0:
-                ws.write(r, 0, "\u2610", tick)
-            else:
-                ws.write(r, c, val, wrap)
-    ws.data_validation(1, 0, max(len(summary), 1), 0,
-                       {"validate": "list", "source": ["\u2610", "\u2611"]})
-    for c, width in enumerate([5, 22, 24, 40, 60, 13, 34]):
-        ws.set_column(c, c, width)
-    ws.freeze_panes(1, 0)
-    ws.autofilter(0, 0, len(summary), len(headers) - 1)
-
-    ws2 = wb.add_worksheet("All spawn entries")
-    h2 = ["Name", "Rarity", "Biome", "Level", "Conditions", "Catch chance", "Drops"]
-    for c, h in enumerate(h2):
-        ws2.write(0, c, h, header)
-    for r, d in enumerate(detail, start=1):
-        for c, k in enumerate(["name", "rarity", "biome", "level", "conditions", "catch", "drops"]):
-            ws2.write(r, c, d[k], wrap)
-    for c, width in enumerate([22, 24, 40, 10, 60, 13, 34]):
-        ws2.set_column(c, c, width)
-    ws2.freeze_panes(1, 0)
-    ws2.autofilter(0, 0, len(detail), len(h2) - 1)
-
-    wb.close()
-
     # JSON for the Pokedex viewer (cobblemon_dex.html)
     out = [{"name": n, "dex": g["dex"], "types": g["types"], "stats": g["stats"],
             "catch": g["catch"], "drops": g["drops"],
             "spawns": [dict(zip(("rarity", "biome", "level", "conditions"), e)) for e in g["entries"]]}
            for n, g in groups.items()]
+    xlsx = not args.output.lower().endswith(".json")
     jpath = Path(args.output).with_suffix(".json")
     jpath.write_text(json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")
+    if xlsx:
+        import xlsxwriter
+        wb = xlsxwriter.Workbook(args.output)
+        header = wb.add_format({"bold": True, "bg_color": "#DDDDDD", "border": 1})
+        wrap = wb.add_format({"text_wrap": True, "valign": "top"})
+        tick = wb.add_format({"valign": "top", "align": "center", "font_size": 14})
+
+        ws = wb.add_worksheet("Mons")
+        headers = ["", "Name", "Rarity", "Biome", "Conditions", "Catch chance", "Drops"]
+        for c, h in enumerate(headers):
+            ws.write(0, c, h, header)
+        for r, row in enumerate(summary, start=1):
+            for c, val in enumerate(row):
+                if c == 0:
+                    ws.write(r, 0, "\u2610", tick)
+                else:
+                    ws.write(r, c, val, wrap)
+        ws.data_validation(1, 0, max(len(summary), 1), 0,
+                           {"validate": "list", "source": ["\u2610", "\u2611"]})
+        for c, width in enumerate([5, 22, 24, 40, 60, 13, 34]):
+            ws.set_column(c, c, width)
+        ws.freeze_panes(1, 0)
+        ws.autofilter(0, 0, len(summary), len(headers) - 1)
+
+        ws2 = wb.add_worksheet("All spawn entries")
+        h2 = ["Name", "Rarity", "Biome", "Level", "Conditions", "Catch chance", "Drops"]
+        for c, h in enumerate(h2):
+            ws2.write(0, c, h, header)
+        for r, d in enumerate(detail, start=1):
+            for c, k in enumerate(["name", "rarity", "biome", "level", "conditions", "catch", "drops"]):
+                ws2.write(r, c, d[k], wrap)
+        for c, width in enumerate([22, 24, 40, 10, 60, 13, 34]):
+            ws2.set_column(c, c, width)
+        ws2.freeze_panes(1, 0)
+        ws2.autofilter(0, 0, len(detail), len(h2) - 1)
+
+        wb.close()
+
+
     print(f"Wrote {jpath}")
-    print(f"Wrote {len(summary)} mons ({len(detail)} spawn entries) to {args.output}")
+    print(f"Wrote {len(summary)} mons ({len(detail)} spawn entries)" + (f" to {args.output}" if xlsx else ""))
 
 
 if __name__ == "__main__":
