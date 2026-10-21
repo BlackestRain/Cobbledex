@@ -61,18 +61,23 @@ def write_user(uid, data):
     os.replace(tmp, final)
 
 
+def get(url, limit):
+    # PokeAPI's API host rejects Python's default User-Agent with a 403
+    req = urllib.request.Request(url, headers={"User-Agent": "cobbledex/1.0"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return r.read(limit)
+
+
 def fetch_sprite(name):
     """Download a sprite from PokeAPI. Returns (png bytes or None, definitely_missing)."""
     try:
         if name.isdigit():
             url = SPRITE_BASE + f"{name}.png"
         else:  # forms are separate entries on PokeAPI (e.g. marowak-alola)
-            with urllib.request.urlopen(POKEAPI + name, timeout=10) as r:
-                url = json.loads(r.read(2_000_000))["sprites"]["front_default"]
+            url = json.loads(get(POKEAPI + name, 2_000_000))["sprites"]["front_default"]
             if not url or not url.startswith("https://raw.githubusercontent.com/PokeAPI/"):
                 return None, True
-        with urllib.request.urlopen(url, timeout=10) as r:
-            img = r.read(500_000)
+        img = get(url, 500_000)
         return (img, False) if img.startswith(b"\x89PNG") else (None, True)
     except urllib.error.HTTPError as e:
         return None, e.code == 404
