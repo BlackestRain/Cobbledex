@@ -1,0 +1,6 @@
+.venv/
+dex_users/
+mons.json
+mons.xlsx
+sprites/
+__pycache__/

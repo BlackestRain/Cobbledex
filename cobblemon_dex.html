@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cobblemon Dex</title>
+<script>
+// apply the saved theme before first paint (no flash); light is the default
+try { document.documentElement.dataset.theme = localStorage.getItem('cobbleTheme') === 'dark' ? 'dark' : 'light'; } catch (e) {}
+</script>
+<style>
+:root{
+  --bg:#7f1010; --hdr:#d32f2f; --hdr-b:#8e0000; --hdr-fg:#fff;
+  --tile:#cfe8cf; --text:#222; --muted:#567; --sub:#456; --h3:#345;
+  --no:#e53935; --yes:#2e9e4f; --box:#fffa; --badge:#345; --bar:#2a7;
+  --field-bg:#fff; --field-b:#eee; --btn-bg:#fff; --btn-fg:#222;
+  --ph:#0001; --ph-fg:#0004; --err:#b00; --scrim:#000a;
+}
+:root[data-theme=dark]{
+  --bg:#15171c; --hdr:#1f3a5f; --hdr-b:#0e2038; --hdr-fg:#e8edf4;
+  --tile:#262b33; --text:#e4e8ee; --muted:#8c9bb0; --sub:#9db0c7; --h3:#8fb4e3;
+  --no:#b9524f; --yes:#3fae6a; --box:#ffffff0d; --badge:#2f5f9e; --bar:#4aa3d8;
+  --field-bg:#12151a; --field-b:#3a4656; --btn-bg:#2b3d57; --btn-fg:#e8edf4;
+  --ph:#ffffff10; --ph-fg:#ffffff40; --err:#ff8a80; --scrim:#000c;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:system-ui,sans-serif;color:var(--text)}
+header{position:sticky;top:0;z-index:5;background:var(--hdr);border-bottom:6px solid var(--hdr-b);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;color:var(--hdr-fg)}
+.lens{width:38px;height:38px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#9ff,#27c 60%,#036);border:4px solid #fff}
+.dot{width:11px;height:11px;border-radius:50%;border:2px solid #fff}
+header b{font-size:18px;letter-spacing:.04em}
+input[type=search],select,.field{padding:8px 12px;border-radius:8px;border:3px solid var(--field-b);background:var(--field-bg);color:var(--text);font-size:14px}
+input[type=search]{flex:1;min-width:160px;max-width:380px}
+.field{width:100%;font-size:15px;padding:9px;margin:6px 0}
+.btn{background:var(--btn-bg);color:var(--btn-fg);border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+#count{margin-left:auto;font-weight:600}
+main{padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+.tile{position:relative;background:var(--tile);border:4px solid var(--no);border-radius:12px;padding:8px;display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:transform .1s}
+.tile:hover{transform:translateY(-3px)}
+.tile.got{border-color:var(--yes)}
+.tile .no{position:absolute;left:8px;top:6px;font-size:11px;color:var(--muted);font-weight:600}
+.tile .chk{position:absolute;right:6px;top:5px;width:18px;height:18px;cursor:pointer}
+.tile .nm{font-size:13px;font-weight:600;text-align:center;margin-top:4px;line-height:1.2}
+.spr{width:96px;height:96px;margin:14px 0 2px;object-fit:contain;image-rendering:pixelated}
+.ph{display:flex;align-items:center;justify-content:center;font-size:40px;color:var(--ph-fg);background:var(--ph);border-radius:8px}
+.empty{grid-column:1/-1;color:#fff;text-align:center;padding:60px 0}
+#ov{position:fixed;inset:0;background:var(--scrim);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
+#ov.on{display:flex}
+#card{background:var(--tile);border:6px solid var(--no);border-radius:14px;width:min(520px,100%);max-height:90vh;overflow:auto;padding:16px;position:relative}
+#card.got{border-color:var(--yes)}
+.x{position:absolute;right:10px;top:8px;border:0;background:none;color:inherit;font-size:26px;cursor:pointer}
+.head{display:flex;gap:14px;align-items:center}.head .spr{margin:0;width:110px;height:110px}
+h2{margin:0}.num{color:var(--muted);font-weight:600}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;background:var(--badge);color:#fff;font-size:12px;margin-right:4px;text-transform:capitalize}
+.stat{display:grid;grid-template-columns:78px 1fr 30px;gap:6px;align-items:center;font-size:12px;margin:3px 0;text-transform:capitalize}
+.bar{height:8px;background:#0002;border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--bar)}
+.box{background:var(--box);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13px;line-height:1.4}
+.box b{display:block}.pre{white-space:pre-line}.cond{color:var(--sub)}
+h3{margin:14px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--h3)}
+.tick{display:flex;align-items:center;gap:8px;font-weight:600;margin-top:10px}.tick input{width:20px;height:20px}
+</style>
+</head>
+<body>
+<header>
+  <div class="lens"></div><div class="dot" style="background:#f55"></div><div class="dot" style="background:#fd3"></div><div class="dot" style="background:#4d6"></div>
+  <b>COBBLEMON DEX</b>
+  <input type="search" id="q" placeholder="Search name, type, biome or drop…">
+  <select id="flt"><option value="all">All</option><option value="got">Caught</option><option value="no">Uncaught</option></select>
+  <span id="count"></span><span id="who"></span>
+  <button class="btn" id="theme"></button>
+</header>
+<main id="grid"><div class="empty">Loading…</div></main>
+<div id="ov"><div id="card"></div></div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const REMOTE = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/';
+let mons = [], shown = [], caught = {}, user = null, lock = false;
+try { caught = JSON.parse(localStorage.getItem('cobbleCaught') || '{}'); } catch (e) {}
+const save = () => { if (user) return; try { localStorage.setItem('cobbleCaught', JSON.stringify(caught)); } catch (e) {} };
+
+// ---- theme
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('cobbleTheme', t); } catch (e) {}
+  $('#theme').textContent = t === 'dark' ? 'Light mode' : 'Dark mode';
+}
+$('#theme').onclick = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+$('#theme').textContent = document.documentElement.dataset.theme === 'dark' ? 'Light mode' : 'Dark mode';
+
+// sprite: local sprites/<dex>.png first, then PokeAPI online, then a "?" placeholder
+const sprite = (m, cls) => m.dex
+  ? `<img class="${cls}" loading="lazy" alt="" src="sprites/${m.dex}.png" onerror="fallback(this,${m.dex})">`
+  : `<div class="${cls} ph">?</div>`;
+function fallback(img, d) {
+  if (!img.dataset.r) { img.dataset.r = 1; img.src = REMOTE + d + '.png'; return; }
+  const p = document.createElement('div'); p.className = img.className + ' ph'; p.textContent = '?'; img.replaceWith(p);
+}
+function toggle(m, on) {
+  on ? caught[m.name] = 1 : delete caught[m.name]; save(); render();
+  if (user) api('api/caught', { name: m.name, on: !!on }).catch(() => {});
+}
+
+// item names only, so searching "rolls" or "chance" doesn't match every mon with drops
+const dropNames = m => m.drops.join('\n').split('\n')
+  .filter(l => l.startsWith('•'))
+  .map(l => l.slice(1).replace(/\s*(×.*|\(.*)$/, '').trim())
+  .join(' | ');
+
+function load(text) {
+  mons = JSON.parse(text).sort((a, b) => (a.dex || 9999) - (b.dex || 9999) || a.name.localeCompare(b.name));
+  mons.forEach(m => m.hay = (m.name + ' ' + m.types.join(' ') + ' ' + m.spawns.map(s => s.biome).join(' ') + ' ' + dropNames(m)).toLowerCase());
+  render();
+}
+function render() {
+  const q = $('#q').value.trim().toLowerCase(), f = $('#flt').value;
+  shown = mons.filter(m => m.hay.includes(q) && (f === 'all' || (f === 'got') === !!caught[m.name]));
+  $('#grid').innerHTML = shown.length ? shown.map((m, i) =>
+    `<div class="tile ${caught[m.name] ? 'got' : ''}" data-i="${i}"><span class="no">${m.dex ? '#' + m.dex : ''}</span>
+     <input type="checkbox" class="chk" title="Caught" ${caught[m.name] ? 'checked' : ''}>${sprite(m, 'spr')}<div class="nm">${esc(m.name)}</div></div>`).join('')
+    : '<div class="empty">Nothing to show.</div>';
+  $('#count').textContent = mons.length ? `${mons.filter(m => caught[m.name]).length} / ${mons.length} caught` : '';
+}
+function open(m) {
+  const stats = Object.entries(m.stats || {}).map(([k, v]) =>
+    `<div class="stat"><span>${esc(k.replace(/_/g, ' '))}</span><div class="bar"><i style="width:${Math.min(100, v / 2)}%"></i></div><span>${v}</span></div>`).join('');
+  const spawns = m.spawns.map((s, i) =>
+    `<div class="box"><b>${m.spawns.length > 1 ? (i + 1) + '. ' : ''}${esc(s.rarity)}${s.level ? ' · Level ' + esc(s.level) : ''}</b>${esc(s.biome)}<br><span class="cond">${esc(s.conditions) || 'No special conditions'}</span></div>`).join('');
+  const drops = m.drops.length ? `<h3>Drops</h3><div class="box pre">${esc(m.drops.join('\n\n'))}</div>` : '';
+  const c = $('#card'); c.className = caught[m.name] ? 'got' : '';
+  c.innerHTML = `<button class="x" onclick="closeCard()">×</button>
+    <div class="head">${sprite(m, 'spr')}<div><h2>${esc(m.name)}</h2><div class="num">${m.dex ? 'No. ' + m.dex : 'Custom'}</div>
+    <div style="margin-top:4px">${m.types.map(t => `<span class="badge">${esc(t)}</span>`).join('')}</div></div></div>
+    <label class="tick"><input type="checkbox" id="tk" ${caught[m.name] ? 'checked' : ''}> Caught</label>
+    <h3>Catch rate: ${esc(m.catch) || '?'}</h3>${stats ? '<h3>Base stats</h3>' + stats : ''}<h3>Spawns</h3>${spawns}${drops}`;
+  $('#tk').onchange = e => { toggle(m, e.target.checked); c.className = e.target.checked ? 'got' : ''; };
+  $('#ov').classList.add('on');
+}
+const closeCard = () => { if (!lock) $('#ov').classList.remove('on'); };
+$('#grid').onclick = e => {
+  const t = e.target.closest('.tile'); if (!t) return;
+  const m = shown[t.dataset.i];
+  e.target.classList.contains('chk') ? toggle(m, e.target.checked) : open(m);
+};
+$('#ov').onclick = e => { if (e.target.id === 'ov') closeCard(); };
+document.onkeydown = e => { if (e.key === 'Escape') closeCard(); };
+$('#q').oninput = render; $('#flt').onchange = render;
+
+// ---- data + per-user progress
+async function api(url, body) {
+  const r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+function setUser(me) {
+  user = me; caught = me.caught || {};
+  $('#who').innerHTML = `${esc(me.name)} · <a href="#" id="key" style="color:inherit">my key</a>`;
+  $('#key').onclick = ev => { ev.preventDefault(); prompt('Your private key. Paste it on another device to restore your dex:', me.id); };
+  render();
+}
+async function enter(url, body) {
+  try { setUser(await api(url, body)); lock = false; closeCard(); }
+  catch (e) { $('#err').textContent = 'That did not work. Check the name or key.'; }
+}
+function askName() {
+  lock = true; const c = $('#card'); c.className = '';
+  c.innerHTML = `<h2>Welcome, trainer!</h2><p>What should we call you?</p>
+    <input id="nm" class="field" maxlength="32" placeholder="Your name"><button class="btn" id="go">Start my dex</button>
+    <h3>Already have a key?</h3><input id="ky" class="field" placeholder="Paste your key"><button class="btn" id="rs">Restore my dex</button>
+    <div id="err" style="color:var(--err);margin-top:8px"></div>`;
+  $('#ov').classList.add('on');
+  $('#go').onclick = () => enter('api/register', { name: $('#nm').value });
+  $('#rs').onclick = () => enter('api/restore', { id: $('#ky').value.trim() });
+}
+(async function init() {
+  try { const r = await fetch('mons.json', { cache: 'no-cache' }); if (!r.ok) throw 0; load(await r.text()); }
+  catch (e) { $('#grid').innerHTML = '<div class="empty">Could not load <code>mons.json</code>. Make sure it is in the same folder as the page.</div>'; }
+  try { const me = await api('api/me'); me.id ? setUser(me) : askName(); } catch (e) { /* no server: local mode */ }
+})();
+</script>
+</body>
+</html>
