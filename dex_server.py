@@ -10,8 +10,8 @@ Each visitor gets a random ID stored in an HttpOnly cookie. The server keeps
 {name, caught} per ID in <DEX_DATA>/<id>.json. The ID doubles as a private
 "key" so a user can restore their dex on another device.
 
-Sprites: /sprites/<slug>.png (forms, from pokesprite) and /sprites/<dex>.png
-(from PokeAPI) are downloaded on first request and cached in <DEX_DATA>/sprites.
+Sprites: /sprites/<slug>.png (forms, e.g. marowak-alola) and /sprites/<dex>.png
+are downloaded from PokeAPI on first request and cached in <DEX_DATA>/sprites.
 Sprites placed by hand in <DEX_STATIC>/sprites take priority.
 """
 import json
@@ -40,10 +40,8 @@ TYPES = {".html": "text/html; charset=utf-8", ".json": "application/json",
 
 SPRITES = DATA / "sprites"
 SPRITE_RE = re.compile(r"^/sprites/([a-z0-9]+(?:-[a-z0-9]+)*)\.png$")
-SOURCES = {
-    "slug": "https://raw.githubusercontent.com/msikma/pokesprite/master/pokemon-gen8/regular/",
-    "dex": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/",
-}
+SPRITE_BASE = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/"
+POKEAPI = "https://pokeapi.co/api/v2/pokemon/"
 MISSING = set()  # sprites the source answered 404 for (until restart)
 
 
@@ -61,6 +59,25 @@ def write_user(uid, data):
     tmp = final.with_suffix(".tmp")
     tmp.write_text(json.dumps(data), "utf-8")
     os.replace(tmp, final)
+
+
+def fetch_sprite(name):
+    """Download a sprite from PokeAPI. Returns (png bytes or None, definitely_missing)."""
+    try:
+        if name.isdigit():
+            url = SPRITE_BASE + f"{name}.png"
+        else:  # forms are separate entries on PokeAPI (e.g. marowak-alola)
+            with urllib.request.urlopen(POKEAPI + name, timeout=10) as r:
+                url = json.loads(r.read(2_000_000))["sprites"]["front_default"]
+            if not url or not url.startswith("https://raw.githubusercontent.com/PokeAPI/"):
+                return None, True
+        with urllib.request.urlopen(url, timeout=10) as r:
+            img = r.read(500_000)
+        return (img, False) if img.startswith(b"\x89PNG") else (None, True)
+    except urllib.error.HTTPError as e:
+        return None, e.code == 404
+    except Exception:
+        return None, False  # network trouble: don't remember it as missing
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -120,22 +137,15 @@ class Handler(BaseHTTPRequestHandler):
             elif name in MISSING:
                 return self.send(404, {})
             else:
-                url = SOURCES["dex" if name.isdigit() else "slug"] + f"{name}.png"
-                try:
-                    SPRITES.mkdir(exist_ok=True)
-                    with urllib.request.urlopen(url, timeout=10) as r:
-                        img = r.read(500_000)
-                    if not img.startswith(b"\x89PNG"):
-                        raise ValueError("not a png")
-                    tmp = f.with_suffix(f".{secrets.token_hex(4)}.tmp")
-                    tmp.write_bytes(img)
-                    os.replace(tmp, f)
-                except urllib.error.HTTPError as e:
-                    if e.code == 404:
+                img, gone = fetch_sprite(name)
+                if not img:
+                    if gone:
                         MISSING.add(name)
                     return self.send(404, {})
-                except Exception:
-                    return self.send(404, {})
+                SPRITES.mkdir(exist_ok=True)
+                tmp = f.with_suffix(f".{secrets.token_hex(4)}.tmp")
+                tmp.write_bytes(img)
+                os.replace(tmp, f)
         self.send_file(f, "image/png", "public, max-age=2592000")
 
     def do_HEAD(self):
