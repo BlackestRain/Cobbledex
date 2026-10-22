@@ -42,6 +42,7 @@ main{padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140
 .tile .no{position:absolute;left:8px;top:6px;font-size:11px;color:var(--muted);font-weight:600}
 .tile .chk{position:absolute;right:6px;top:5px;width:18px;height:18px;cursor:pointer}
 .tile .nm{font-size:13px;font-weight:600;text-align:center;margin-top:4px;line-height:1.2}
+.tile .sv{font-size:12px;font-weight:600;color:var(--muted);margin-top:2px}
 .spr{width:96px;height:96px;margin:14px 0 2px;object-fit:contain;image-rendering:pixelated}
 .ph{display:flex;align-items:center;justify-content:center;font-size:40px;color:var(--ph-fg);background:var(--ph);border-radius:8px}
 .empty{grid-column:1/-1;color:#fff;text-align:center;padding:60px 0}
@@ -67,6 +68,8 @@ h3{margin:14px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercas
   <b>COBBLEMON DEX</b>
   <input type="search" id="q" placeholder="Search name, type, biome or drop…">
   <select id="flt"><option value="all">All</option><option value="got">Caught</option><option value="no">Uncaught</option></select>
+  <select id="srt" title="Sort by" aria-label="Sort by"></select>
+  <button class="btn" id="dir" title="Switch between ascending and descending" aria-label="Sort direction"></button>
   <span id="count"></span><span id="who"></span>
   <button class="btn" id="theme"></button>
 </header>
@@ -77,6 +80,8 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const REMOTE = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/';
 let mons = [], shown = [], caught = {}, user = null, lock = false;
+let sortKey = 'dex', sortDir = 'asc';
+try { const s = JSON.parse(localStorage.getItem('cobbleSort') || '{}'); if (s.key) sortKey = s.key; if (s.dir === 'desc') sortDir = 'desc'; } catch (e) {}
 try { caught = JSON.parse(localStorage.getItem('cobbleCaught') || '{}'); } catch (e) {}
 const save = () => { if (user) return; try { localStorage.setItem('cobbleCaught', JSON.stringify(caught)); } catch (e) {} };
 
@@ -116,14 +121,47 @@ const dropNames = m => m.drops.join('\n').split('\n')
 function load(text) {
   mons = JSON.parse(text).sort((a, b) => (a.dex || 9999) - (b.dex || 9999) || a.name.localeCompare(b.name));
   mons.forEach(m => m.hay = (m.name + ' ' + m.types.join(' ') + ' ' + m.spawns.map(s => s.biome).join(' ') + ' ' + dropNames(m)).toLowerCase());
+  mons.forEach(m => { const v = Object.values(m.stats || {}); m.total = v.length ? v.reduce((a, b) => a + b, 0) : undefined; });
+  buildSort();
   render();
 }
+
+// ---- sorting
+const STAT_ORDER = ['hp', 'attack', 'defence', 'defense', 'special_attack', 'special_defence', 'special_defense', 'speed'];
+const statLabel = k => k.split('_').map(w => w === 'hp' ? 'HP' : w === 'special' ? 'Sp.' : w[0].toUpperCase() + w.slice(1)).join(' ');
+const sortVal = (m, k) => k === 'total' ? m.total : k.startsWith('s:') ? (m.stats || {})[k.slice(2)] : undefined;
+const isStatSort = () => sortKey !== 'dex' && sortKey !== 'name';
+const syncDir = () => { $('#dir').textContent = sortDir === 'asc' ? '↑ Asc' : '↓ Desc'; };
+const saveSort = () => { try { localStorage.setItem('cobbleSort', JSON.stringify({ key: sortKey, dir: sortDir })); } catch (e) {} };
+function buildSort() {
+  const keys = [...new Set(mons.flatMap(m => Object.keys(m.stats || {})))]
+    .sort((a, b) => (STAT_ORDER.indexOf(a) + 1 || 99) - (STAT_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
+  const opts = [['dex', 'Dex number'], ['name', 'Name'], ['total', 'Total stats'], ...keys.map(k => ['s:' + k, statLabel(k)])];
+  $('#srt').innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+  if (!opts.some(o => o[0] === sortKey)) sortKey = 'dex';
+  $('#srt').value = sortKey; syncDir();
+}
+function cmp(a, b) {
+  const mul = sortDir === 'asc' ? 1 : -1, byDex = (a.dex || 9999) - (b.dex || 9999);
+  let r = 0;
+  if (sortKey === 'name') r = a.name.localeCompare(b.name) * mul;
+  else if (sortKey === 'dex') { if (!a.dex || !b.dex) { if (a.dex) return -1; if (b.dex) return 1; } else r = byDex * mul; }  // no dex number: always last
+  else {
+    const x = sortVal(a, sortKey), y = sortVal(b, sortKey);
+    if (x == null || y == null) { if (x != null) return -1; if (y != null) return 1; }  // no data: always last
+    else r = (x - y) * mul;
+  }
+  return r || byDex || a.name.localeCompare(b.name);
+}
+const sv = (m, lbl) => { const v = isStatSort() ? sortVal(m, sortKey) : null; return v == null ? '' : `<div class="sv">${esc(lbl)} ${v}</div>`; };
+
 function render() {
   const q = $('#q').value.trim().toLowerCase(), f = $('#flt').value;
-  shown = mons.filter(m => m.hay.includes(q) && (f === 'all' || (f === 'got') === !!caught[m.name]));
+  shown = mons.filter(m => m.hay.includes(q) && (f === 'all' || (f === 'got') === !!caught[m.name])).sort(cmp);
+  const lbl = $('#srt').selectedOptions[0]?.textContent || '';
   $('#grid').innerHTML = shown.length ? shown.map((m, i) =>
     `<div class="tile ${caught[m.name] ? 'got' : ''}" data-i="${i}"><span class="no">${m.dex ? '#' + m.dex : ''}</span>
-     <input type="checkbox" class="chk" title="Caught" ${caught[m.name] ? 'checked' : ''}>${sprite(m, 'spr')}<div class="nm">${esc(m.name)}</div></div>`).join('')
+     <input type="checkbox" class="chk" title="Caught" ${caught[m.name] ? 'checked' : ''}>${sprite(m, 'spr')}<div class="nm">${esc(m.name)}</div>${sv(m, lbl)}</div>`).join('')
     : '<div class="empty">Nothing to show.</div>';
   $('#count').textContent = mons.length ? `${mons.filter(m => caught[m.name]).length} / ${mons.length} caught` : '';
 }
@@ -151,6 +189,11 @@ $('#grid').onclick = e => {
 $('#ov').onclick = e => { if (e.target.id === 'ov') closeCard(); };
 document.onkeydown = e => { if (e.key === 'Escape') closeCard(); };
 $('#q').oninput = render; $('#flt').onchange = render;
+$('#srt').onchange = () => {  // stats default to highest first, dex and name to ascending
+  sortKey = $('#srt').value; sortDir = isStatSort() ? 'desc' : 'asc';
+  saveSort(); syncDir(); render(); window.scrollTo(0, 0);
+};
+$('#dir').onclick = () => { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; saveSort(); syncDir(); render(); window.scrollTo(0, 0); };
 
 // ---- data + per-user progress
 async function api(url, body) {
