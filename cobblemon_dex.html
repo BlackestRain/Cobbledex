@@ -5,9 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cobblemon Dex</title>
 <script>
-// apply the saved theme before first paint (no flash); light is the default
 try { document.documentElement.dataset.theme = localStorage.getItem('cobbleTheme') === 'dark' ? 'dark' : 'light'; } catch (e) {}
-// apply the saved scale before first paint
 try {
   const savedScale = localStorage.getItem('cobbleScale');
   if (savedScale) document.documentElement.style.setProperty('--scale', savedScale / 100);
@@ -42,7 +40,6 @@ input[type=search]{flex:1;min-width:160px;max-width:380px}
 .btn{background:var(--btn-bg);color:var(--btn-fg);border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
 #count{margin-left:auto;font-weight:600;font-size:14px}
 
-/* Scalable Grid & Tiles */
 main{padding:calc(16px * var(--scale));display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(140px * var(--scale)),1fr));gap:calc(12px * var(--scale))}
 .tile{position:relative;background:var(--tile);border:calc(4px * var(--scale)) solid var(--no);border-radius:calc(12px * var(--scale));padding:calc(8px * var(--scale));display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:transform .1s}
 .tile:hover{transform:translateY(calc(-3px * var(--scale)))}
@@ -57,24 +54,104 @@ main{padding:calc(16px * var(--scale));display:grid;grid-template-columns:repeat
 .empty{grid-column:1/-1;color:#fff;text-align:center;padding:60px 0}
 #ov{position:fixed;inset:0;background:var(--scrim);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
 #ov.on{display:flex}
-#card{background:var(--tile);border:6px solid var(--no);border-radius:14px;width:min(520px,100%);max-height:90vh;overflow:auto;padding:16px;position:relative}
+
+.card-wrapper{position:relative;display:flex;align-items:center;width:min(560px,100%)}
+#card{background:var(--tile);border:6px solid var(--no);border-radius:14px;width:100%;max-height:90vh;overflow:auto;padding:16px;position:relative}
 #card.got{border-color:var(--yes)}
-.x{position:absolute;right:10px;top:8px;border:0;background:none;color:inherit;font-size:26px;cursor:pointer}
+.x{position:absolute;right:10px;top:8px;border:0;background:none;color:inherit;font-size:26px;cursor:pointer;z-index:2}
+.page-btn{background:var(--badge);color:#fff;border:0;width:36px;height:50px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.8;transition:opacity .1s;z-index:2}
+.page-btn:hover{opacity:1}
+.page-btn.prev{border-radius:8px 0 0 8px;margin-right:-2px}
+.page-btn.next{border-radius:0 8px 8px 0;margin-left:-2px}
+.page-indicator{text-align:center;font-size:11px;color:var(--muted);font-weight:600;margin-top:8px;text-transform:uppercase;letter-spacing:.05em}
+
 .head{display:flex;gap:14px;align-items:center}.head .spr{margin:0;width:110px;height:110px}
 .title-row{display:flex;align-items:center;gap:10px}
 .smogon-link{display:none;align-items:center;padding:3px 8px;border-radius:6px;background:var(--badge);color:#fff;font-size:12px;font-weight:bold;text-decoration:none;transition:transform .1s, opacity .1s;opacity:.9}
 .smogon-link.active{display:inline-flex}
 .smogon-link:hover{transform:scale(1.08);opacity:1}
 h2{margin:0}.num{color:var(--muted);font-weight:600}
-.badge{display:inline-block;padding:2px 9px;border-radius:99px;background:var(--badge);color:#fff;font-size:12px;margin-right:4px;text-transform:capitalize}
+
+/* Type Badge Colors based on provided reference */
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;color:#fff;font-size:12px;font-weight:bold;margin-right:4px;text-transform:capitalize}
+.badge-normal{background:#9fa19f}
+.badge-fire{background:#e62829}
+.badge-fighting{background:#ff8000}
+.badge-water{background:#2980ef}
+.badge-flying{background:#81b9ef}
+.badge-grass{background:#3fa129}
+.badge-poison{background:#9141cb}
+.badge-electric{background:#fac000}
+.badge-ground{background:#915121}
+.badge-psychic{background:#ef4179}
+.badge-rock{background:#afa981}
+.badge-ice{background:#3fd8ff}
+.badge-bug{background:#91a119}
+.badge-dragon{background:#5060e1}
+.badge-ghost{background:#704170}
+.badge-dark{background:#50413f}
+.badge-steel{background:#60a1b8}
+.badge-fairy{background:#ef70ef}
+
 .stat{display:grid;grid-template-columns:78px 1fr 30px;gap:6px;align-items:center;font-size:12px;margin:3px 0;text-transform:capitalize}
 .bar{height:8px;background:#0002;border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--bar)}
-.box{background:var(--box);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13px;line-height:1.4}
-.box b{display:block}.pre{white-space:pre-line}.cond{color:var(--sub)}
+.box{background:var(--box);border-radius:8px;padding:10px 12px;margin:8px 0;font-size:13px;line-height:1.5}
+.box b{color:var(--h3)}
 h3{margin:14px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--h3)}
 .tick{display:flex;align-items:center;gap:8px;font-weight:600;margin-top:10px}.tick input{width:20px;height:20px}
 .scale-control{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
 .scale-control input[type=range]{width:80px;cursor:pointer}
+
+.move-table{width:100%;border-collapse:collapse;margin-top:6px;font-size:13px}
+.move-table th,.move-table td{padding:6px 10px;text-align:left;border-bottom:1px solid #0001}
+.move-table th{background:var(--box);color:var(--h3);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.move-badge{display:inline-block;padding:2px 6px;border-radius:4px;background:var(--badge);color:#fff;font-size:11px;font-weight:600}
+
+
+/* Move pool page */
+.mv-bar{display:flex;flex-direction:column;gap:8px;margin:8px 0 6px}
+.mv-search{width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;border:1px solid var(--field-b);background:var(--field-bg);color:var(--text);font-size:13px}
+.mv-chips{display:flex;gap:6px;flex-wrap:wrap}
+.mv-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;background:var(--box);border:1px solid #0002;font-size:12px;font-weight:600;cursor:pointer;user-select:none}
+.mv-chip input{display:none}
+.mv-chip:has(input:checked){background:var(--badge);color:#fff;border-color:transparent}
+.mv-chip small{opacity:.7;font-weight:700}
+.mv-box{--cols:52px minmax(0,1fr) 64px 34px 40px 40px;container-type:inline-size;background:var(--box);border-radius:8px;overflow:hidden}
+.mv-colh{display:grid;grid-template-columns:var(--cols);gap:0 8px;align-items:end;padding:8px calc(14px + var(--sbw,0px)) 5px 12px;border-bottom:1px solid #0002;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.mv-colh span:nth-child(3){text-align:center}.mv-colh span:nth-child(n+5){text-align:right}
+.mv-scroll{max-height:clamp(200px,calc(90vh - 235px),620px);overscroll-behavior:contain;overflow-x:hidden;overflow-y:auto;padding:0 14px 6px 12px}
+.mv-group-h{margin:0;padding:12px 0 3px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--h3);font-weight:800;display:flex;gap:6px}
+.mv-group-h span{opacity:.55}
+.mv-row{display:grid;grid-template-columns:var(--cols);align-items:center;gap:0 8px;padding:5px 0;border-bottom:1px solid #0001;font-size:13px;cursor:default}
+.mv-row.has{cursor:pointer}.mv-row.has:hover{background:#0000000a}
+.mv-row>*,.mv-colh>*{min-width:0}
+.mv-row b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mv-type{display:block;text-align:center;padding:1px 0;border-radius:99px;color:#fff;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.mv-cat{display:block;text-align:center;font-size:9px;letter-spacing:.03em;font-weight:800;border-radius:3px;color:#fff;padding:1px 0}
+.mv-cat.physical{background:#d9622b}.mv-cat.special{background:#4a78d4}.mv-cat.status{background:#8a93a0}
+.mv-num{text-align:right;font-variant-numeric:tabular-nums;color:var(--sub);font-size:12px;white-space:nowrap}
+.mv-num.dim{opacity:.4}
+.mv-detail{display:none;grid-column:1/-1;padding:6px 4px 4px;font-size:12px;line-height:1.45;color:var(--sub)}
+.mv-row.open .mv-detail{display:block}.mv-row.open{background:#00000008}
+.mv-facts{display:flex;gap:12px;flex-wrap:wrap;margin-top:4px;font-size:11px;font-weight:700;color:var(--h3)}
+.mv-facts i{font-style:normal;font-weight:500;color:var(--muted)}
+.mv-sort{padding:6px 8px;border-radius:8px;border:1px solid var(--field-b);background:var(--field-bg);color:var(--text);font-size:12px}
+.mv-top{display:flex;gap:6px}
+/* Narrow cards (phones): name on its own line, stats underneath */
+@container (max-width:400px){
+  .mv-colh{display:none}
+  .mv-row{grid-template-columns:56px 30px auto auto;justify-content:start;grid-template-areas:"lv name name name" "type cat pow acc";gap:3px 8px;padding:6px 0}
+  .mv-badge{grid-area:lv}.mv-name{grid-area:name}.mv-type{grid-area:type}.mv-cat{grid-area:cat}.mv-num.p{grid-area:pow}.mv-num.a{grid-area:acc}
+  .mv-num{text-align:left}.mv-num.p::before{content:"Pow ";color:var(--muted)}.mv-num.a::before{content:"Acc ";color:var(--muted)}
+  .mv-detail{grid-area:auto;grid-column:1/-1}
+}
+.card-wrapper.wide{width:min(680px,100%)}
+.mv-empty{padding:18px 0;text-align:center;color:var(--muted);font-size:13px}
+.mv-badge{display:block;text-align:center;padding:2px 0;border-radius:4px;background:var(--badge);color:#fff;font-size:11px;font-weight:600}
+
+/* Compact Inline Evolution Links */
+.evo-link{display:inline-block;padding:1px 6px;border-radius:4px;background:var(--badge);color:#fff;font-size:12px;font-weight:600;text-decoration:none;transition:opacity .1s;opacity:.9;margin:0 1px;cursor:pointer}
+.evo-link:hover{opacity:1}
 </style>
 </head>
 <body>
@@ -93,18 +170,29 @@ h3{margin:14px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercas
   <button class="btn" id="theme"></button>
 </header>
 <main id="grid"><div class="empty">Loading…</div></main>
-<div id="ov"><div id="card"></div></div>
+<div id="ov">
+  <div class="card-wrapper">
+    <button class="page-btn prev" id="prevBtn" title="Previous Page">‹</button>
+    <div id="card"></div>
+    <button class="page-btn next" id="nextBtn" title="Next Page">›</button>
+  </div>
+</div>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const REMOTE = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/';
 let mons = [], shown = [], caught = {}, user = null, lock = false;
+let movesData = {}, moveNames = {}, moveData = {}, moveSort = 'default';
+let curMoves = [], moveFilters = {}, moveQuery = '';
+let monMap = {};
 let sortKey = 'dex', sortDir = 'asc';
+let currentMon = null, pageIdx = 0;
+const PAGES = ['Overview & Stats', 'Moves'];
+
 try { const s = JSON.parse(localStorage.getItem('cobbleSort') || '{}'); if (s.key) sortKey = s.key; if (s.dir === 'desc') sortDir = 'desc'; } catch (e) {}
 try { caught = JSON.parse(localStorage.getItem('cobbleCaught') || '{}'); } catch (e) {}
 const save = () => { if (user) return; try { localStorage.setItem('cobbleCaught', JSON.stringify(caught)); } catch (e) {} };
 
-// ---- theme
 function setTheme(t) {
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem('cobbleTheme', t); } catch (e) {}
@@ -113,12 +201,8 @@ function setTheme(t) {
 $('#theme').onclick = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 $('#theme').textContent = document.documentElement.dataset.theme === 'dark' ? 'Light mode' : 'Dark mode';
 
-// ---- UI Scale
 let uiScale = 100;
-try {
-  const savedScale = localStorage.getItem('cobbleScale');
-  if (savedScale) uiScale = parseInt(savedScale, 10);
-} catch (e) {}
+try { const savedScale = localStorage.getItem('cobbleScale'); if (savedScale) uiScale = parseInt(savedScale, 10); } catch (e) {}
 
 function applyScale(val) {
   uiScale = val;
@@ -130,16 +214,37 @@ $('#scaleRange').value = uiScale;
 applyScale(uiScale);
 $('#scaleRange').oninput = e => applyScale(e.target.value);
 
-// sprite: sprites/<slug>.png (forms), then sprites/<dex>.png, then PokeAPI directly, then a "?" placeholder
-const chain = (slug, d) => [slug && `sprites/${slug}.png`, d && `sprites/${d}.png`, d && REMOTE + d + '.png'].filter(Boolean);
+// Animated sprites (GIF) first, static PNGs only as a last resort.
+//   1. your own sprites/ folder (<slug>.gif, then <dex>.gif)
+//   2. Pokemon Showdown's animated sprites (covers regional forms and newer generations)
+//   3. PokeAPI's animated Gen 5 sprites (base forms only, up to #649)
+//   4. static PNGs, as before
+// A form (e.g. "Ninetales (Alolan)") never falls back to a dex-number sprite until the very end,
+// because that would show the base Pokemon.
+const SD_ANI = 'https://play.pokemonshowdown.com/sprites/ani/';
+const PA_ANI = REMOTE + 'versions/generation-v/black-white/animated/';
+const chain = (slug, d, isForm) => {
+  const flat = slug && slug.replace(/-/g, '');            // "mr-mime" -> "mrmime" (Showdown's naming)
+  return [
+    slug && `sprites/${slug}.gif`,
+    d && !isForm && `sprites/${d}.gif`,
+    slug && SD_ANI + slug + '.gif',
+    flat && flat !== slug && SD_ANI + flat + '.gif',
+    d && !isForm && PA_ANI + d + '.gif',
+    slug && `sprites/${slug}.png`,
+    d && `sprites/${d}.png`,
+    d && REMOTE + d + '.png'
+  ].filter(Boolean);
+};
 const sprite = (m, cls) => {
-  const c = chain(m.slug, m.dex);
+  const f = /\(/.test(m.name || '') ? 1 : 0;
+  const c = chain(m.slug, m.dex, f);
   return c.length
-    ? `<img class="${cls}" loading="lazy" alt="" src="${esc(c[0])}" data-n="0" data-s="${esc(m.slug || '')}" data-d="${m.dex || ''}" onerror="fallback(this)">`
+    ? `<img class="${cls}" loading="lazy" alt="" src="${esc(c[0])}" data-n="0" data-s="${esc(m.slug || '')}" data-d="${m.dex || ''}" data-f="${f}" onerror="fallback(this)">`
     : `<div class="${cls} ph">?</div>`;
 };
 function fallback(img) {
-  const c = chain(img.dataset.s, img.dataset.d), n = +img.dataset.n + 1;
+  const c = chain(img.dataset.s, img.dataset.d, img.dataset.f === '1'), n = +img.dataset.n + 1;
   if (n < c.length) { img.dataset.n = n; img.src = c[n]; return; }
   const p = document.createElement('div'); p.className = img.className + ' ph'; p.textContent = '?'; img.replaceWith(p);
 }
@@ -148,21 +253,30 @@ function toggle(m, on) {
   if (user) api('api/caught', { name: m.name, on: !!on }).catch(() => {});
 }
 
-// item names only, so searching "rolls" or "chance" doesn't match every mon with drops
 const dropNames = m => m.drops.join('\n').split('\n')
   .filter(l => l.startsWith('•'))
   .map(l => l.slice(1).replace(/\s*(×.*|\(.*)$/, '').trim())
   .join(' | ');
 
-function load(text) {
-  mons = JSON.parse(text).sort((a, b) => (a.dex || 9999) - (b.dex || 9999) || a.name.localeCompare(b.name));
-  mons.forEach(m => m.hay = (m.name + ' ' + m.types.join(' ') + ' ' + m.spawns.map(s => s.biome).join(' ') + ' ' + dropNames(m)).toLowerCase());
-  mons.forEach(m => { const v = Object.values(m.stats || {}); m.total = v.length ? v.reduce((a, b) => a + b, 0) : undefined; });
+function load(monText, movesText, namesText, detailText) {
+  mons = JSON.parse(monText).sort((a, b) => (a.dex || 9999) - (b.dex || 9999) || a.name.localeCompare(b.name));
+  try { movesData = JSON.parse(movesText); } catch (e) {}
+  try { moveNames = JSON.parse(namesText || '{}'); } catch (e) {}
+  try { moveData = JSON.parse(detailText || '{}'); } catch (e) {}
+
+  monMap = {};
+  mons.forEach(m => {
+    monMap[m.name.toLowerCase()] = m;
+    monMap[m.name.toLowerCase().replace(/[^a-z0-9]/g, '')] = m;
+    m.hay = (m.name + ' ' + m.types.join(' ') + ' ' + m.spawns.map(s => s.biome).join(' ') + ' ' + dropNames(m)).toLowerCase();
+    const v = Object.values(m.stats || {});
+    m.total = v.length ? v.reduce((a, b) => a + b, 0) : undefined;
+  });
+
   buildSort();
   render();
 }
 
-// ---- sorting
 const STAT_ORDER = ['hp', 'attack', 'defence', 'defense', 'special_attack', 'special_defence', 'special_defense', 'speed'];
 const statLabel = k => k.split('_').map(w => w === 'hp' ? 'HP' : w === 'special' ? 'Sp.' : w[0].toUpperCase() + w.slice(1)).join(' ');
 const sortVal = (m, k) => k === 'total' ? m.total : k.startsWith('s:') ? (m.stats || {})[k.slice(2)] : undefined;
@@ -181,10 +295,10 @@ function cmp(a, b) {
   const mul = sortDir === 'asc' ? 1 : -1, byDex = (a.dex || 9999) - (b.dex || 9999);
   let r = 0;
   if (sortKey === 'name') r = a.name.localeCompare(b.name) * mul;
-  else if (sortKey === 'dex') { if (!a.dex || !b.dex) { if (a.dex) return -1; if (b.dex) return 1; } else r = byDex * mul; }  // no dex number: always last
+  else if (sortKey === 'dex') { if (!a.dex || !b.dex) { if (a.dex) return -1; if (b.dex) return 1; } else r = byDex * mul; }
   else {
     const x = sortVal(a, sortKey), y = sortVal(b, sortKey);
-    if (x == null || y == null) { if (x != null) return -1; if (y != null) return 1; }  // no data: always last
+    if (x == null || y == null) { if (x != null) return -1; if (y != null) return 1; }
     else r = (x - y) * mul;
   }
   return r || byDex || a.name.localeCompare(b.name);
@@ -201,76 +315,233 @@ function render() {
     : '<div class="empty">Nothing to show.</div>';
 
   if (mons.length) {
-    const caughtCount = mons.filter(m => caught[m.name]).length;
-    const pct = ((caughtCount / mons.length) * 100).toFixed(1);
-    $('#count').textContent = `${caughtCount} / ${mons.length} caught (${pct}%)`;
+    // Forms (e.g. Ninetales / Ninetales (Alolan)) share a dex number, so count each dex number once.
+    // A species counts as caught if any of its forms is caught.
+    const dexKey = m => m.dex ? 'd' + m.dex : 'n' + m.name;
+    const species = new Set(mons.map(dexKey));
+    const got = new Set(mons.filter(m => caught[m.name]).map(dexKey));
+    const pct = ((got.size / species.size) * 100).toFixed(1);
+    const el = $('#count');
+    el.textContent = `${got.size} / ${species.size} caught (${pct}%)`;
+    const extra = mons.length - species.size;
+    el.title = extra > 0 ? `${extra} alternate form${extra === 1 ? '' : 's'} not counted in the total` : '';
   } else {
     $('#count').textContent = '';
   }
 }
-function open(m) {
+
+function formatEvoLinks(text) {
+  if (!text) return '';
+  return esc(text).replace(/Evolves (from|into) ([A-Za-z0-9 -]+?)(?=\s+(at|when|with|in|\(|$|\.))/g, (match, dir, target) => {
+    const cleanTarget = target.trim().toLowerCase();
+    const cleanKey = cleanTarget.replace(/[^a-z0-9]/g, '');
+    const found = monMap[cleanTarget] || monMap[cleanKey];
+    if (found) {
+      return `Evolves ${dir} <a class="evo-link" data-name="${esc(found.name)}">${esc(target)}</a>`;
+    }
+    return match;
+  });
+}
+
+function openByName(name) {
+  const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const m = monMap[name.toLowerCase()] || monMap[cleanKey];
+  if (m) open(m, 0);
+}
+
+function open(m, page = 0) {
+  currentMon = m;
+  pageIdx = page;
+
   const stats = Object.entries(m.stats || {}).map(([k, v]) =>
     `<div class="stat"><span>${esc(k.replace(/_/g, ' '))}</span><div class="bar"><i style="width:${Math.min(100, v / 2)}%"></i></div><span>${v}</span></div>`).join('');
   const spawns = m.spawns.map((s, i) =>
     `<div class="box"><b>${m.spawns.length > 1 ? (i + 1) + '. ' : ''}${esc(s.rarity)}${s.level ? ' · Level ' + esc(s.level) : ''}</b>${esc(s.biome)}<br><span class="cond">${esc(s.conditions) || 'No special conditions'}</span></div>`).join('');
   const drops = m.drops.length ? `<h3>Drops</h3><div class="box pre">${esc(m.drops.join('\n\n'))}</div>` : '';
+  const evolution = m.evolution_text ? `<h3>Evolution</h3><div class="box">${formatEvoLinks(m.evolution_text)}</div>` : '';
 
-  // Smogon URL Builder
   let rawSlug = (m.slug || m.name || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
-  rawSlug = rawSlug.replace('alolan', 'alola')
-                   .replace('galarian', 'galar')
-                   .replace('hisuian', 'hisui')
-                   .replace('paldean', 'paldea');
-
+  rawSlug = rawSlug.replace('alolan', 'alola').replace('galarian', 'galar').replace('hisuian', 'hisui').replace('paldean', 'paldea');
   let genFolder = 'sv';
   if (rawSlug.includes('alola')) genFolder = 'sm';
   else if (rawSlug.includes('galar')) genFolder = 'ss';
-
   const smogonUrl = `https://www.smogon.com/dex/${genFolder}/pokemon/${rawSlug}/`;
 
   const c = $('#card'); c.className = caught[m.name] ? 'got' : '';
-  c.innerHTML = `<button class="x" onclick="closeCard()">×</button>
-    <div class="head">${sprite(m, 'spr')}<div>
-      <div class="title-row">
-        <h2>${esc(m.name)}</h2>
-        <a href="${smogonUrl}" target="_blank" rel="noopener noreferrer" id="smogonBtn" class="smogon-link">Smogon</a>
-      </div>
-      <div class="num">${m.dex ? 'No. ' + m.dex : 'Custom'}</div>
-      <div style="margin-top:4px">${m.types.map(t => `<span class="badge">${esc(t)}</span>`).join('')}</div>
-    </div></div>
-    <label class="tick"><input type="checkbox" id="tk" ${caught[m.name] ? 'checked' : ''}> Caught</label>
-    <h3>Catch rate: ${esc(m.catch) || '?'}</h3>${stats ? '<h3>Base stats</h3>' + stats : ''}<h3>Spawns</h3>${spawns}${drops}`;
 
-  $('#tk').onchange = e => { toggle(m, e.target.checked); c.className = e.target.checked ? 'got' : ''; };
+  let pageContent = '';
+  const cleanNameKey = m.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  if (pageIdx === 0) {
+    pageContent = `
+      <div class="head">${sprite(m, 'spr')}<div>
+        <div class="title-row">
+          <h2>${esc(m.name)}</h2>
+          <a href="${smogonUrl}" target="_blank" rel="noopener noreferrer" id="smogonBtn" class="smogon-link">Smogon</a>
+        </div>
+        <div class="num">${m.dex ? 'No. ' + m.dex : 'Custom'}</div>
+        <div style="margin-top:4px">${m.types.map(t => `<span class="badge badge-${t.toLowerCase()}">${esc(t)}</span>`).join('')}</div>
+      </div></div>
+      <label class="tick"><input type="checkbox" id="tk" ${caught[m.name] ? 'checked' : ''}> Caught</label>
+      <h3>Catch rate: ${esc(m.catch) || '?'}</h3>
+      ${evolution}
+      ${stats ? '<h3>Base stats</h3>' + stats : ''}
+      <h3>Spawns</h3>${spawns}
+      ${drops}
+    `;
+  } else if (pageIdx === 1) {
+    let rawMoves = movesData[m.name.toLowerCase()] || movesData[cleanNameKey] || movesData[rawSlug] || [];
+    let movesHtml = '<p style="color:var(--muted)">No move data available.</p>';
+
+    if (rawMoves.length > 0) {
+      curMoves = rawMoves.map(parseMove);
+      try { moveFilters = JSON.parse(localStorage.getItem('cobbleMoveFilters') || '{}'); } catch (e) { moveFilters = {}; }
+      moveQuery = ''; moveSort = 'default';
+      const counts = {};
+      curMoves.forEach(x => counts[x.cat] = (counts[x.cat] || 0) + 1);
+      const chips = MOVE_GROUPS.filter(([k]) => counts[k]).map(([k, label]) =>
+        `<label class="mv-chip"><input type="checkbox" class="move-filter" value="${k}" ${moveFilters[k] === false ? '' : 'checked'}>${label} <small>${counts[k]}</small></label>`).join('');
+      movesHtml = `
+        <div class="mv-bar">
+          <div class="mv-top">
+            <input type="search" id="moveSearch" class="mv-search" placeholder="Search name, type or category…" autocomplete="off">
+            <select id="moveSort" class="mv-sort" title="Sort within each group">
+              <option value="default">Default</option><option value="name">A–Z</option><option value="power">Power</option><option value="type">Type</option>
+            </select>
+          </div>
+          <div class="mv-chips">${chips}</div>
+        </div>
+        <div class="mv-box" id="moveBox">
+          ${Object.keys(moveData).length ? '<div class="mv-colh"><span>Learn</span><span>Move</span><span>Type</span><span></span><span>Pow</span><span>Acc</span></div>' : ''}
+          <div class="mv-scroll" id="moveList"></div>
+        </div>`;
+    }
+    pageContent = `<h2>Move Pool</h2><div style="margin-top:10px">${movesHtml}</div>`;
+  }
+
+  c.innerHTML = `<button class="x" onclick="closeCard()">×</button>` + pageContent + `<div class="page-indicator">Page ${pageIdx + 1} of ${PAGES.length}: ${PAGES[pageIdx]}</div>`;
+
+  if (pageIdx === 1) renderMoves();
+
+  if (pageIdx === 0) {
+    $('#tk').onchange = e => { toggle(m, e.target.checked); c.className = e.target.checked ? 'got' : ''; };
+    fetch(`/api/smogon_check?url=${encodeURIComponent(smogonUrl)}`)
+      .then(r => r.json())
+      .then(data => { if (data.exists) $('#smogonBtn')?.classList.add('active'); })
+      .catch(() => { if (!user) $('#smogonBtn')?.classList.add('active'); });
+  }
+
+  document.querySelector('.card-wrapper').classList.toggle('wide', pageIdx === 1);
   $('#ov').classList.add('on');
-
-  // Verify link against backend probe
-  fetch(`/api/smogon_check?url=${encodeURIComponent(smogonUrl)}`)
-    .then(r => r.json())
-    .then(data => {
-      if (data.exists) $('#smogonBtn')?.classList.add('active');
-    })
-    .catch(() => {
-      // Fallback: if running standalone without backend, show link by default
-      if (!user) $('#smogonBtn')?.classList.add('active');
-    });
 }
+
+// ---- Move pool helpers
+const MOVE_GROUPS = [['level', 'Level-up'], ['evo', 'Evolution'], ['tm', 'TM'], ['tutor', 'Tutor'], ['egg', 'Egg'], ['legacy', 'Legacy'], ['other', 'Other']];
+const moveLabel = id => moveNames[id] || String(id).replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+function parseMove(entry) {
+  const parts = String(entry).split(':');
+  const method = (parts.length > 1 ? parts[0] : '').toLowerCase();
+  const id = (parts.length > 1 ? parts.slice(1).join(':') : parts[0]).toLowerCase();
+  let cat = 'other', level = 0;
+  if (/^\d+$/.test(method)) { cat = 'level'; level = +method; }
+  else if (['evo', 'egg', 'tutor', 'legacy'].includes(method)) cat = method;
+  else if (['tm', 'hm', 'tr'].includes(method)) cat = 'tm';
+  return { cat, level, id, name: moveLabel(id) };
+}
+
+const BADGE = { evo: 'Evo', tm: 'TM', tutor: 'Tutor', egg: 'Egg', legacy: 'Legacy', other: 'Other' };
+const CAT_ABBR = { physical: 'PHY', special: 'SPE', status: 'STA' };
+const num = v => (v === undefined || v === null || v === '' || v === 0 || v === true) ? '—' : v;
+function moveRow(x) {
+  const d = moveData[x.id] || {};
+  const t = d.type ? `<span class="mv-type badge-${esc(d.type)}">${esc(d.type)}</span>` : '<span></span>';
+  const c = d.cat ? `<span class="mv-cat ${esc(d.cat)}" title="${esc(d.cat)}">${CAT_ABBR[d.cat] || d.cat.slice(0, 3).toUpperCase()}</span>` : '<span></span>';
+  const pw = num(d.power), ac = num(d.accuracy);
+  const facts = d.cat ? `<div class="mv-facts">${[
+      d.pp ? `<span><i>PP </i>${d.pp}</span>` : '',
+      d.priority ? `<span><i>Priority </i>${d.priority > 0 ? '+' : ''}${d.priority}</span>` : '',
+      d.effectChance ? `<span><i>Effect chance </i>${d.effectChance}%</span>` : '',
+      d.target ? `<span><i>Target </i>${esc(String(d.target).replace(/_/g, ' '))}</span>` : ''
+    ].join('')}</div>` : '';
+  const detail = (d.desc || facts) ? `<div class="mv-detail">${esc(d.desc || '')}${facts}</div>` : '';
+  return `<div class="mv-row${detail ? ' has' : ''}">`
+    + `<span class="mv-badge">${x.cat === 'level' ? 'Lv ' + x.level : esc(BADGE[x.cat] || 'Other')}</span>`
+    + `<b class="mv-name" title="${esc(x.name)}">${esc(x.name)}</b>${t}${c}`
+    + `<span class="mv-num p${pw === '—' ? ' dim' : ''}">${pw}</span><span class="mv-num a${ac === '—' ? ' dim' : ''}">${ac}</span>${detail}</div>`;
+}
+function renderMoves() {
+  const box = $('#moveList'); if (!box) return;
+  const q = moveQuery, ql = q.replace(/\s+/g, '');
+  const visible = curMoves.filter(x => {
+    if (moveFilters[x.cat] === false) return false;
+    if (!q) return true;
+    const d = moveData[x.id] || {};
+    return x.name.toLowerCase().includes(q) || x.id.includes(ql) || d.type === q || d.cat === q;
+  });
+  const sorters = {
+    name: (a, b) => a.name.localeCompare(b.name),
+    power: (a, b) => ((moveData[b.id] || {}).power || 0) - ((moveData[a.id] || {}).power || 0) || a.name.localeCompare(b.name),
+    type: (a, b) => String((moveData[a.id] || {}).type || '~').localeCompare(String((moveData[b.id] || {}).type || '~')) || a.name.localeCompare(b.name)
+  };
+  let html = '';
+  for (const [k, label] of MOVE_GROUPS) {
+    const list = visible.filter(x => x.cat === k);
+    if (!list.length) continue;
+    list.sort(moveSort !== 'default' ? sorters[moveSort]
+      : (a, b) => (k === 'level' ? a.level - b.level : 0) || a.name.localeCompare(b.name));
+    html += `<h4 class="mv-group-h">${label}<span>${list.length}</span></h4>`;
+    html += list.map(moveRow).join('');
+  }
+  box.innerHTML = html || '<div class="mv-empty">No moves match.</div>';
+  // keep the fixed header aligned with the rows when a scrollbar is present
+  $('#moveBox').style.setProperty('--sbw', (box.offsetWidth - box.clientWidth) + 'px');
+}
+
+$('#card').onclick = e => {
+  const row = e.target.closest('.mv-row.has');
+  if (row) { const was = row.classList.contains('open'); document.querySelectorAll('.mv-row.open').forEach(r => r.classList.remove('open')); if (!was) row.classList.add('open'); return; }
+  const link = e.target.closest('.evo-link');
+  if (link && link.dataset.name) {
+    openByName(link.dataset.name);
+  }
+};
+
+$('#card').onchange = e => {
+  if (e.target.id === 'moveSort') { moveSort = e.target.value; renderMoves(); return; }
+  if (e.target.classList.contains('move-filter')) {
+    moveFilters[e.target.value] = e.target.checked;
+    try { localStorage.setItem('cobbleMoveFilters', JSON.stringify(moveFilters)); } catch (err) {}
+    renderMoves();
+  }
+};
+$('#card').oninput = e => {
+  if (e.target.id === 'moveSearch') { moveQuery = e.target.value.trim().toLowerCase(); renderMoves(); }
+};
+
+$('#prevBtn').onclick = () => { if (currentMon) open(currentMon, (pageIdx - 1 + PAGES.length) % PAGES.length); };
+$('#nextBtn').onclick = () => { if (currentMon) open(currentMon, (pageIdx + 1) % PAGES.length); };
+
 const closeCard = () => { if (!lock) $('#ov').classList.remove('on'); };
 $('#grid').onclick = e => {
   const t = e.target.closest('.tile'); if (!t) return;
   const m = shown[t.dataset.i];
-  e.target.classList.contains('chk') ? toggle(m, e.target.checked) : open(m);
+  e.target.classList.contains('chk') ? toggle(m, e.target.checked) : open(m, 0);
 };
 $('#ov').onclick = e => { if (e.target.id === 'ov') closeCard(); };
-document.onkeydown = e => { if (e.key === 'Escape') closeCard(); };
+document.onkeydown = e => {
+  if (e.key === 'Escape') closeCard();
+  else if (e.key === 'ArrowLeft' && $('#ov').classList.contains('on')) $('#prevBtn').click();
+  else if (e.key === 'ArrowRight' && $('#ov').classList.contains('on')) $('#nextBtn').click();
+};
+
 $('#q').oninput = render; $('#flt').onchange = render;
-$('#srt').onchange = () => {  // stats default to highest first, dex and name to ascending
+$('#srt').onchange = () => {
   sortKey = $('#srt').value; sortDir = isStatSort() ? 'desc' : 'asc';
   saveSort(); syncDir(); render(); window.scrollTo(0, 0);
 };
 $('#dir').onclick = () => { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; saveSort(); syncDir(); render(); window.scrollTo(0, 0); };
 
-// ---- data + per-user progress
 async function api(url, body) {
   const r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
   if (!r.ok) throw new Error(r.status);
@@ -297,8 +568,17 @@ function askName() {
   $('#rs').onclick = () => enter('api/restore', { id: $('#ky').value.trim() });
 }
 (async function init() {
-  try { const r = await fetch('mons.json', { cache: 'no-cache' }); if (!r.ok) throw 0; load(await r.text()); }
-  catch (e) { $('#grid').innerHTML = '<div class="empty">Could not load <code>mons.json</code>. Make sure it is in the same folder as the page.</div>'; }
+  try {
+    const [monRes, movesRes, namesRes, detailRes] = await Promise.all([
+      fetch('mons.json', { cache: 'no-cache' }).then(r => r.text()),
+      fetch('moves.json', { cache: 'no-cache' }).then(r => r.text()).catch(() => '{}'),
+      fetch('movenames.json', { cache: 'no-cache' }).then(r => r.ok ? r.text() : '{}').catch(() => '{}'),
+      fetch('movedata.json', { cache: 'no-cache' }).then(r => r.ok ? r.text() : '{}').catch(() => '{}')
+    ]);
+    load(monRes, movesRes, namesRes, detailRes);
+  } catch (e) {
+    $('#grid').innerHTML = '<div class="empty">Could not load dataset files. Make sure <code>mons.json</code> and <code>moves.json</code> are in the same folder.</div>';
+  }
   try { const me = await api('api/me'); me.id ? setUser(me) : askName(); } catch (e) { /* no server: local mode */ }
 })();
 </script>
