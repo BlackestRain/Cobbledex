@@ -7,9 +7,15 @@
 <script>
 // apply the saved theme before first paint (no flash); light is the default
 try { document.documentElement.dataset.theme = localStorage.getItem('cobbleTheme') === 'dark' ? 'dark' : 'light'; } catch (e) {}
+// apply the saved scale before first paint
+try {
+  const savedScale = localStorage.getItem('cobbleScale');
+  if (savedScale) document.documentElement.style.setProperty('--scale', savedScale / 100);
+} catch (e) {}
 </script>
 <style>
 :root{
+  --scale: 1;
   --bg:#7f1010; --hdr:#d32f2f; --hdr-b:#8e0000; --hdr-fg:#fff;
   --tile:#cfe8cf; --text:#222; --muted:#567; --sub:#456; --h3:#345;
   --no:#e53935; --yes:#2e9e4f; --box:#fffa; --badge:#345; --bar:#2a7;
@@ -35,15 +41,18 @@ input[type=search]{flex:1;min-width:160px;max-width:380px}
 .field{width:100%;font-size:15px;padding:9px;margin:6px 0}
 .btn{background:var(--btn-bg);color:var(--btn-fg);border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
 #count{margin-left:auto;font-weight:600}
-main{padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
-.tile{position:relative;background:var(--tile);border:4px solid var(--no);border-radius:12px;padding:8px;display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:transform .1s}
-.tile:hover{transform:translateY(-3px)}
+
+/* Scalable Grid & Tiles */
+main{padding:calc(16px * var(--scale));display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(140px * var(--scale)),1fr));gap:calc(12px * var(--scale))}
+.tile{position:relative;background:var(--tile);border:calc(4px * var(--scale)) solid var(--no);border-radius:calc(12px * var(--scale));padding:calc(8px * var(--scale));display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:transform .1s}
+.tile:hover{transform:translateY(calc(-3px * var(--scale)))}
 .tile.got{border-color:var(--yes)}
-.tile .no{position:absolute;left:8px;top:6px;font-size:11px;color:var(--muted);font-weight:600}
-.tile .chk{position:absolute;right:6px;top:5px;width:18px;height:18px;cursor:pointer}
-.tile .nm{font-size:13px;font-weight:600;text-align:center;margin-top:4px;line-height:1.2}
-.tile .sv{font-size:12px;font-weight:600;color:var(--muted);margin-top:2px}
-.spr{width:96px;height:96px;margin:14px 0 2px;object-fit:contain;image-rendering:pixelated}
+.tile .no{position:absolute;left:calc(8px * var(--scale));top:calc(6px * var(--scale));font-size:calc(11px * var(--scale));color:var(--muted);font-weight:600}
+.tile .chk{position:absolute;right:calc(6px * var(--scale));top:calc(5px * var(--scale));width:calc(18px * var(--scale));height:calc(18px * var(--scale));cursor:pointer}
+.tile .nm{font-size:calc(13px * var(--scale));font-weight:600;text-align:center;margin-top:calc(4px * var(--scale));line-height:1.2}
+.tile .sv{font-size:calc(12px * var(--scale));font-weight:600;color:var(--muted);margin-top:calc(2px * var(--scale))}
+.spr{width:calc(96px * var(--scale));height:calc(96px * var(--scale));margin:calc(14px * var(--scale)) 0 calc(2px * var(--scale));object-fit:contain;image-rendering:pixelated}
+
 .ph{display:flex;align-items:center;justify-content:center;font-size:40px;color:var(--ph-fg);background:var(--ph);border-radius:8px}
 .empty{grid-column:1/-1;color:#fff;text-align:center;padding:60px 0}
 #ov{position:fixed;inset:0;background:var(--scrim);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
@@ -60,6 +69,8 @@ h2{margin:0}.num{color:var(--muted);font-weight:600}
 .box b{display:block}.pre{white-space:pre-line}.cond{color:var(--sub)}
 h3{margin:14px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--h3)}
 .tick{display:flex;align-items:center;gap:8px;font-weight:600;margin-top:10px}.tick input{width:20px;height:20px}
+.scale-control{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.scale-control input[type=range]{width:80px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -70,6 +81,10 @@ h3{margin:14px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercas
   <select id="flt"><option value="all">All</option><option value="got">Caught</option><option value="no">Uncaught</option></select>
   <select id="srt" title="Sort by" aria-label="Sort by"></select>
   <button class="btn" id="dir" title="Switch between ascending and descending" aria-label="Sort direction"></button>
+  <div class="scale-control" title="UI Scale">
+    <span>Scale:</span>
+    <input type="range" id="scaleRange" min="75" max="150" step="5" value="100">
+  </div>
   <span id="count"></span><span id="who"></span>
   <button class="btn" id="theme"></button>
 </header>
@@ -93,6 +108,23 @@ function setTheme(t) {
 }
 $('#theme').onclick = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 $('#theme').textContent = document.documentElement.dataset.theme === 'dark' ? 'Light mode' : 'Dark mode';
+
+// ---- UI Scale
+let uiScale = 100;
+try {
+  const savedScale = localStorage.getItem('cobbleScale');
+  if (savedScale) uiScale = parseInt(savedScale, 10);
+} catch (e) {}
+
+function applyScale(val) {
+  uiScale = val;
+  document.documentElement.style.setProperty('--scale', val / 100);
+  $('#scaleRange').value = val;
+  try { localStorage.setItem('cobbleScale', val); } catch (e) {}
+}
+$('#scaleRange').value = uiScale;
+applyScale(uiScale);
+$('#scaleRange').oninput = e => applyScale(e.target.value);
 
 // sprite: sprites/<slug>.png (forms), then sprites/<dex>.png, then PokeAPI directly, then a "?" placeholder
 const chain = (slug, d) => [slug && `sprites/${slug}.png`, d && `sprites/${d}.png`, d && REMOTE + d + '.png'].filter(Boolean);
