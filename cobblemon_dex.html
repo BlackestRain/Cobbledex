@@ -40,7 +40,7 @@ input[type=search],select,.field{padding:8px 12px;border-radius:8px;border:3px s
 input[type=search]{flex:1;min-width:160px;max-width:380px}
 .field{width:100%;font-size:15px;padding:9px;margin:6px 0}
 .btn{background:var(--btn-bg);color:var(--btn-fg);border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
-#count{margin-left:auto;font-weight:600}
+#count{margin-left:auto;font-weight:600;font-size:14px}
 
 /* Scalable Grid & Tiles */
 main{padding:calc(16px * var(--scale));display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(140px * var(--scale)),1fr));gap:calc(12px * var(--scale))}
@@ -61,6 +61,10 @@ main{padding:calc(16px * var(--scale));display:grid;grid-template-columns:repeat
 #card.got{border-color:var(--yes)}
 .x{position:absolute;right:10px;top:8px;border:0;background:none;color:inherit;font-size:26px;cursor:pointer}
 .head{display:flex;gap:14px;align-items:center}.head .spr{margin:0;width:110px;height:110px}
+.title-row{display:flex;align-items:center;gap:10px}
+.smogon-link{display:none;align-items:center;padding:3px 8px;border-radius:6px;background:var(--badge);color:#fff;font-size:12px;font-weight:bold;text-decoration:none;transition:transform .1s, opacity .1s;opacity:.9}
+.smogon-link.active{display:inline-flex}
+.smogon-link:hover{transform:scale(1.08);opacity:1}
 h2{margin:0}.num{color:var(--muted);font-weight:600}
 .badge{display:inline-block;padding:2px 9px;border-radius:99px;background:var(--badge);color:#fff;font-size:12px;margin-right:4px;text-transform:capitalize}
 .stat{display:grid;grid-template-columns:78px 1fr 30px;gap:6px;align-items:center;font-size:12px;margin:3px 0;text-transform:capitalize}
@@ -195,7 +199,14 @@ function render() {
     `<div class="tile ${caught[m.name] ? 'got' : ''}" data-i="${i}"><span class="no">${m.dex ? '#' + m.dex : ''}</span>
      <input type="checkbox" class="chk" title="Caught" ${caught[m.name] ? 'checked' : ''}>${sprite(m, 'spr')}<div class="nm">${esc(m.name)}</div>${sv(m, lbl)}</div>`).join('')
     : '<div class="empty">Nothing to show.</div>';
-  $('#count').textContent = mons.length ? `${mons.filter(m => caught[m.name]).length} / ${mons.length} caught` : '';
+
+  if (mons.length) {
+    const caughtCount = mons.filter(m => caught[m.name]).length;
+    const pct = ((caughtCount / mons.length) * 100).toFixed(1);
+    $('#count').textContent = `${caughtCount} / ${mons.length} caught (${pct}%)`;
+  } else {
+    $('#count').textContent = '';
+  }
 }
 function open(m) {
   const stats = Object.entries(m.stats || {}).map(([k, v]) =>
@@ -203,14 +214,46 @@ function open(m) {
   const spawns = m.spawns.map((s, i) =>
     `<div class="box"><b>${m.spawns.length > 1 ? (i + 1) + '. ' : ''}${esc(s.rarity)}${s.level ? ' · Level ' + esc(s.level) : ''}</b>${esc(s.biome)}<br><span class="cond">${esc(s.conditions) || 'No special conditions'}</span></div>`).join('');
   const drops = m.drops.length ? `<h3>Drops</h3><div class="box pre">${esc(m.drops.join('\n\n'))}</div>` : '';
+
+  // Smogon URL Builder
+  let rawSlug = (m.slug || m.name || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  rawSlug = rawSlug.replace('alolan', 'alola')
+                   .replace('galarian', 'galar')
+                   .replace('hisuian', 'hisui')
+                   .replace('paldean', 'paldea');
+
+  let genFolder = 'sv';
+  if (rawSlug.includes('alola')) genFolder = 'sm';
+  else if (rawSlug.includes('galar')) genFolder = 'ss';
+
+  const smogonUrl = `https://www.smogon.com/dex/${genFolder}/pokemon/${rawSlug}/`;
+
   const c = $('#card'); c.className = caught[m.name] ? 'got' : '';
   c.innerHTML = `<button class="x" onclick="closeCard()">×</button>
-    <div class="head">${sprite(m, 'spr')}<div><h2>${esc(m.name)}</h2><div class="num">${m.dex ? 'No. ' + m.dex : 'Custom'}</div>
-    <div style="margin-top:4px">${m.types.map(t => `<span class="badge">${esc(t)}</span>`).join('')}</div></div></div>
+    <div class="head">${sprite(m, 'spr')}<div>
+      <div class="title-row">
+        <h2>${esc(m.name)}</h2>
+        <a href="${smogonUrl}" target="_blank" rel="noopener noreferrer" id="smogonBtn" class="smogon-link">Smogon</a>
+      </div>
+      <div class="num">${m.dex ? 'No. ' + m.dex : 'Custom'}</div>
+      <div style="margin-top:4px">${m.types.map(t => `<span class="badge">${esc(t)}</span>`).join('')}</div>
+    </div></div>
     <label class="tick"><input type="checkbox" id="tk" ${caught[m.name] ? 'checked' : ''}> Caught</label>
     <h3>Catch rate: ${esc(m.catch) || '?'}</h3>${stats ? '<h3>Base stats</h3>' + stats : ''}<h3>Spawns</h3>${spawns}${drops}`;
+
   $('#tk').onchange = e => { toggle(m, e.target.checked); c.className = e.target.checked ? 'got' : ''; };
   $('#ov').classList.add('on');
+
+  // Verify link against backend probe
+  fetch(`/api/smogon_check?url=${encodeURIComponent(smogonUrl)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.exists) $('#smogonBtn')?.classList.add('active');
+    })
+    .catch(() => {
+      // Fallback: if running standalone without backend, show link by default
+      if (!user) $('#smogonBtn')?.classList.add('active');
+    });
 }
 const closeCard = () => { if (!lock) $('#ov').classList.remove('on'); };
 $('#grid').onclick = e => {

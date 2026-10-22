@@ -161,6 +161,32 @@ class Handler(BaseHTTPRequestHandler):
         m = SPRITE_RE.match(p)
         if m:
             return self.sprite(m.group(1))
+
+        # --- ADD THE SMOGON CHECK ENDPOINT HERE ---
+        if p == "/api/smogon_check":
+            from urllib.parse import parse_qs, urlparse
+            query = parse_qs(urlparse(self.path).query)
+            target_url = query.get("url", [""])[0]
+
+            exists = False
+            if target_url and target_url.startswith("https://www.smogon.com/"):
+                try:
+                    req = urllib.request.Request(target_url, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        if resp.status == 200:
+                            exists = True
+                except Exception:
+                    exists = False
+
+            body = json.dumps({"exists": exists}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return self.wfile.write(body)
+        # ------------------------------------------
+
         if p != "/api/me":
             return self.send(404, {}) if p.startswith("/api/") else self.static(p)
         uid = self.uid()
