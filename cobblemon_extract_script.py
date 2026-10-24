@@ -368,6 +368,9 @@ def main():
                     help="fetch base Cobblemon data from GitLab into a temp folder (deleted afterwards)")
     ap.add_argument("--ref", default="main", help="branch or tag to download (default: main)")
     ap.add_argument("-o", "--output", default="cobblemon_spawns.xlsx")
+    ap.add_argument("--spawned-only", action="store_true",
+                    help="only list Pokemon that have a natural spawn (default: also list species with no "
+                         "spawn entry, e.g. Rotom, with an empty spawns list)")
     ap.add_argument("--include-variants", action="store_true",
                     help="include alpha and herd spawns (excluded by default)")
     args = ap.parse_args()
@@ -385,12 +388,15 @@ def main():
     preset_files = collect(roots, "spawn_detail_presets")
 
     species = {}
+    all_species = []  # (species data, [form dicts merged over it]) for species with no spawn entry
     for (_, _rel), (path, data) in species_files.items():
         base_name = norm(data.get("name", path.stem))
         species[base_name] = data
         species[norm(path.stem)] = data
 
         # Unpack nested forms cleanly
+        merged_forms = []
+        all_species.append((data, merged_forms))
         for form in data.get("forms", []):
             form_name = form.get("name", "")
             if not form_name:
@@ -398,10 +404,12 @@ def main():
             # Base data with the form's own values layered over it
             merged_form = {**data, **form}
             merged_form["name"] = data.get("name", path.stem)  # keep species name ("Ninetales"), not form name ("Alola")
-            merged_form["primaryType"] = form.get("primaryType") or data.get("primaryType")
-            merged_form["secondaryType"] = form.get("secondaryType")  # don't inherit base's 2nd type
+            if "primaryType" in form:  # form redefines its typing: don't inherit the base's 2nd type
+                merged_form["primaryType"] = form["primaryType"]
+                merged_form["secondaryType"] = form.get("secondaryType")
             merged_form["_key"] = f"{base_name}_{form_alias(form_name)}"
             merged_form.pop("forms", None)
+            merged_forms.append((form_name, merged_form))
 
             # Index by every way a spawn file might refer to this form:
             # the form name ("Alola") and its aspects ("alolan"), both normalised to one alias.
@@ -538,6 +546,43 @@ def main():
             if levels:
                 cond = f"Level {levels.pop()}\n" + cond
         summary.append(["", name, rarity, biome, cond, g["catch"], "\n\n".join(g["drops"])])
+
+    # Species with no natural spawn entry (Rotom, fossils, legendaries...): list them with an empty spawn list
+    if not args.spawned_only:
+        have = {g["key"] for g in groups.values()}
+        added = []
+
+        def add_unspawned(sp, key, name, slug):
+            if key in have or name in groups:
+                return
+            have.add(key)
+            groups[name] = {
+                "catch": sp.get("catchRate", ""), "drops": [format_drops(sp.get("drops"))] if sp.get("drops") else [],
+                "entries": [], "dex": sp.get("nationalPokedexNumber"), "key": key, "slug": slug,
+                "types": [t for t in (sp.get("primaryType"), sp.get("secondaryType")) if t],
+                "stats": sp.get("baseStats", {}), "sp": sp,
+            }
+            added.append(name)
+
+        for data, forms in all_species:
+            if data.get("implemented") is False:
+                continue
+            base_key = data["_key"]
+            base_label = pretty(data.get("name", base_key))
+            add_unspawned(data, base_key, base_label, sprite_slug(data.get("name"), [], base_key))
+            for form_name, mf in forms:
+                if mf.get("battleOnly"):
+                    continue
+                # only forms that actually differ (type or stats), not cosmetic variants
+                if all(mf.get(k) == data.get(k) for k in ("primaryType", "secondaryType", "baseStats")):
+                    continue
+                alias = form_alias(form_name)
+                label_ = ADJECTIVE.get(alias, pretty(form_name)).title() if alias in ADJECTIVE else pretty(form_name)
+                add_unspawned(mf, mf["_key"], f"{base_label} ({label_})",
+                              sprite_slug(data.get("name"), [form_name], base_key))
+        if added:
+            print(f"Added {len(added)} species/forms with no natural spawn: "
+                  + ", ".join(added[:25]) + (" ..." if len(added) > 25 else ""))
 
     # Format evolution rules accurately capturing exact items, levels, and regional biome conditions
     def format_evo_rule(e, is_outgoing=True, base_name=""):
@@ -677,7 +722,7 @@ def main():
     for n, g in groups.items():
         evos = evo_sentences.get(g["key"], [])
         mons_out.append({
-            "name": n, "dex": g["dex"], "slug": g["slug"], "types": g["types"], "stats": g["stats"],
+            "name": n, "dex": g["dex"], "key": g["key"], "slug": g["slug"], "types": g["types"], "stats": g["stats"],
             "catch": g["catch"], "drops": g["drops"],
             "evolution_text": ". ".join(evos) + ("." if evos else ""),
             "spawns": [dict(zip(("rarity", "biome", "level", "conditions"), e)) for e in g["entries"]]
@@ -690,7 +735,7 @@ def main():
         if sp.get("moves"):
             moves_out[norm(n)] = sp.get("moves")
     for n, g in groups.items():
-        sp = species.get(norm(n), {})
+        sp = g.get("sp") or species.get(norm(n), {})
         if sp.get("moves"):
             moves_out[n.lower()] = sp.get("moves")
     Path("moves.json").write_text(json.dumps(moves_out, indent=1, ensure_ascii=False), encoding="utf-8")
