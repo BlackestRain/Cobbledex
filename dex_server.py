@@ -25,6 +25,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
+import dex_sync
 
 DATA = Path(os.environ.get("DEX_DATA", "dex_users")).resolve()
 DATA.mkdir(parents=True, exist_ok=True)
@@ -108,9 +109,9 @@ class Handler(BaseHTTPRequestHandler):
         secure = "; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else ""
         return f"dexid={uid}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax{secure}"
 
-    def body(self):
+    def body(self, limit=MAX_BODY):
         n = int(self.headers.get("Content-Length") or 0)
-        if n > MAX_BODY:
+        if n > limit:
             return None
         try:
             return json.loads(self.rfile.read(n) or b"{}")
@@ -194,7 +195,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send(200, {"id": uid, **u} if u else {})
 
     def do_POST(self):
-        p, b = self.path.split("?")[0], self.body()
+        p = self.path.split("?")[0]
+        b = self.body(dex_sync.MAX_SYNC_BODY if p == "/api/sync" else MAX_BODY)
         if not isinstance(b, dict):
             return self.send(400, {"error": "bad request"})
         with LOCK:
@@ -206,6 +208,11 @@ class Handler(BaseHTTPRequestHandler):
                 u = {"name": name, "caught": {}}
                 write_user(uid, u)
                 return self.send(200, {"id": uid, **u}, self.cookie(uid))
+            if p == "/api/sync":
+                code, obj = dex_sync.handle(self.headers.get("Authorization", ""), b,
+                                             read_user, write_user, STATIC, MAX_CAUGHT)
+                return self.send(code, obj)
+
             if p == "/api/restore":
                 uid = str(b.get("id", "")).strip()
                 u = read_user(uid)
